@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 require 'rubygems'
 require 'sequel'
+require 'yaml'
 
 opts = YAML.load_file 'db.yml'
 
