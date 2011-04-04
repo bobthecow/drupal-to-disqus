@@ -6,3 +6,5 @@
 :adapter: mysql
 :forum_shortname: disqus_shortname
 :api_key: disqus_api_key
+:default_email: 'default@example.com'
+:skip_emails: ['fake@example.com', 'something@example.org', '']

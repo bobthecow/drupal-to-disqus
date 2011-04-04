@@ -5,21 +5,28 @@ require 'disqus/api'
 
 require 'rubygems'
 require 'sequel'
+require 'mysql'
+require 'yaml'
+require 'digest/md5'
 
 opts = YAML.load_file 'db.yml'
 
 Disqus::defaults[:api_key] = opts[:api_key]
 
 forums = Disqus::Api.get_forum_list
-forum = forums['message'].find do |forum| forum['shortname'] = 'bhuga' end
+
+forum = forums['message'].select { |forum| forum['shortname'] == opts[:forum_shortname] }[0]
 
 puts "I'm using this forum: #{forum.inspect}"
-
 forum_key = (Disqus::Api.get_forum_api_key :forum_id => forum["id"])['message']
 
 #puts forum_key.inspect
 
 db = Sequel.connect opts
+
+default_email = opts[:default_email]
+skip_emails = opts[:skip_emails]
+
 
 #db[:comments].each do | comment | puts comment[:thread] end
 comment_threads = {}
@@ -27,6 +34,12 @@ comments = []
 db[:comments].each do |comment|
   comment_threads["#{comment[:nid]}-#{comment[:thread]}"] = comment
   comments << comment
+end
+
+# get thread titles
+titles = {}
+db[:node].select(:nid, :title).each do |node|
+  titles[node[:nid]] = node[:title]
 end
 
 # make sure that comments without parents are first, so that we always create
@@ -50,8 +63,8 @@ comments.each do | comment |
  
   if threads[comment[:nid]].nil? 
     thread_response = Disqus::Api.thread_by_identifier :forum_api_key => forum_key,
-                                          :title => comment[:thread],
-                                          :identifier => "node/#{comment[:nid]}"
+                                          :title => titles[comment[:nid]] ? titles[comment[:nid]] : comment[:thread],
+                                          :identifier => Digest::MD5.hexdigest("#{comment[:nid]}")
     #puts "fetched a new thread.  response was #{thread_response.inspect}"
     thread_id = thread_response['message']['thread']
     threads[comment[:nid]] = thread_id
@@ -64,7 +77,7 @@ comments.each do | comment |
                         :thread_id => thread['id'],
                         :message => comment[:comment],
                         :author_name => comment[:name].length > 0 ? comment[:name] : 'Anonymous',
-                        :author_email => comment[:mail].length,
+                        :author_email => comment[:mail].length == 0 ? default_email : skip_emails.include?(comment[:mail].chomp) ? (comment[:cid].to_s + '@localhost') : comment[:mail],
                         :parent_post => comment[:parent] ? comment[:parent][:disqus_id] : nil,
                         :created_at => comment[:created_at],
                         :author_url => comment[:homepage],
